@@ -34,9 +34,6 @@ struct Args {
     #[arg(short = 'l', long, default_value_t = false)]
     line_number: bool,
 
-    // /// Include non-plain text files
-    // #[arg(short = 'p', long, default_value_t = true)]
-    // only_plain: bool,
     /// Respect .gitignore rules
     #[arg(short = 'g', long, default_value_t = true)]
     respect_gitignore: bool,
@@ -44,6 +41,10 @@ struct Args {
     /// Show matched files
     #[arg(long, default_value_t = false)]
     show_matched: bool,
+
+    /// Relative path prefix to strip (for better Windows compatibility)
+    #[arg(skip = std::path::MAIN_SEPARATOR.to_string() + ".")]
+    relative_prefix: String,
 
     /// Cached compiled regex patterns for exclude
     #[clap(skip)]
@@ -78,6 +79,20 @@ impl Args {
         }
 
         default_include.unwrap_or(exclude_is_empty && include_is_empty)
+    }
+
+    /// Convert a path to a platform-independent string format for matching
+    fn path_to_normalized_string(&self, path: &PathBuf) -> Option<String> {
+        path.to_str().map(|p| {
+            // Convert Windows backslashes to forward slashes for consistent matching
+            let normalized = p.replace('\\', "/");
+
+            // Strip relative prefix if present
+            normalized
+                .strip_prefix(&self.relative_prefix)
+                .unwrap_or(&normalized)
+                .to_string()
+        })
     }
 }
 
@@ -126,14 +141,9 @@ async fn find_files(args: &Args) -> Result<Vec<PathBuf>> {
 
             let path_buf = PathBuf::from(path);
 
-            // if args.only_plain && !utils::is_plain_text_by_content(&path_buf).await {
-            //     continue;
-            // }
-
-            // Convert path to string for regex matching
-            if let Some(path_str) = path.to_str() {
-                let relative_path = path_str.strip_prefix("./").unwrap_or(path_str);
-                if args.should_include(relative_path, Some(true)) {
+            // Check if we should include this file
+            if let Some(normalized_path) = args.path_to_normalized_string(&path_buf) {
+                if args.should_include(&normalized_path, Some(true)) {
                     files.push(path_buf);
                 }
             }
@@ -148,14 +158,9 @@ async fn find_files(args: &Args) -> Result<Vec<PathBuf>> {
                 let mut subdir_files = Box::pin(find_files(args)).await?;
                 files.append(&mut subdir_files);
             } else if path.is_file().await {
-                // if !args.only_plain && !utils::is_plain_text_by_content(&path).await {
-                //     continue;
-                // }
-
-                // Convert path to string for regex matching
-                if let Some(path_str) = path.to_str() {
-                    let relative_path = path_str.strip_prefix("./").unwrap_or(path_str);
-                    if args.should_include(relative_path, None) {
+                // Check if we should include this file
+                if let Some(normalized_path) = args.path_to_normalized_string(&path) {
+                    if args.should_include(&normalized_path, None) {
                         files.push(path);
                     }
                 }
@@ -169,6 +174,9 @@ async fn find_files(args: &Args) -> Result<Vec<PathBuf>> {
 #[async_std::main]
 async fn main() -> Result<()> {
     let mut args = Args::parse();
+
+    // Set the relative prefix based on platform
+    args.relative_prefix = format!("{}{}", std::path::MAIN_SEPARATOR, ".");
 
     // Cached compiled regex patterns
     if let Some(exclude) = &args.exclude {
@@ -239,9 +247,10 @@ async fn main() -> Result<()> {
             .await
             .with_context(|| format!("Failed to read file {:?}", file_path))?;
 
-        if let Some(path_str) = file_path.to_str() {
+        // Use normalized path display for consistency across platforms
+        if let Some(normalized_path) = args.path_to_normalized_string(file_path) {
             output
-                .write_all(format!("{}\n```\n", path_str).as_bytes())
+                .write_all(format!("{}\n```\n", normalized_path).as_bytes())
                 .await?;
 
             if args.line_number {

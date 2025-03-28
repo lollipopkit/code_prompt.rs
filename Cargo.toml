@@ -10,6 +10,6 @@ clap = { version = "4", features = ["derive"] }
 async-std = { version = "1", features = ["attributes"] }
 anyhow = "1"
 regex = "1"
-colored = "2"
+colored = "3"
 futures = "0"
 ignore = "0.4"
