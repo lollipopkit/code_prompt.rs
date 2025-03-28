@@ -1,0 +1,15 @@
+[package]
+name = "code_prompt"
+version = "0.1.0"
+edition = "2021"
+authors = ["lollipopkit <a@lpkt.cn>"]
+description = "Combine code files into a single file for LLM prompts."
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+async-std = { version = "1", features = ["attributes"] }
+anyhow = "1"
+regex = "1"
+colored = "2"
+futures = "0"
+ignore = "0.4"
