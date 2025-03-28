@@ -4,7 +4,6 @@ use anyhow::{Context, Result};
 use async_std::{fs, path::PathBuf, prelude::*};
 use clap::Parser;
 use colored::Colorize;
-use futures::stream::StreamExt;
 use ignore::WalkBuilder;
 use regex::Regex;
 use std::io::{self, Write};
