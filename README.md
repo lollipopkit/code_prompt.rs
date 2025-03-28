@@ -9,7 +9,7 @@ A command-line tool for gathering source code files into a single consolidated f
 ## Installation
 
 ```bash
-curl -fsSL https://github.com/lollipopkit/code_prompt.rs/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/lollipopkit/code_prompt.rs/refs/heads/main/install.sh | bash
 ```
 
 Or download from the [release page](https://github.com/lollipopkit/code_prompt.rs/releases) manually.
