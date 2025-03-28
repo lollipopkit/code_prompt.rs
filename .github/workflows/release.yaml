@@ -51,12 +51,6 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      # Extract version from tag
-      - name: Extract version from tag
-        id: get_version
-        shell: bash
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-
       - name: Install cross-compilation dependencies for Linux ARM64
         if: matrix.target == 'aarch64-unknown-linux-gnu'
         run: |
@@ -75,14 +69,11 @@ jobs:
       - name: Prepare asset
         shell: bash
         run: |
-          cp "target/${{ matrix.target }}/release/${{ matrix.artifact_name }}" "code_prompt-${{ steps.get_version.outputs.VERSION }}-${{ matrix.target }}"
+          cp "target/${{ matrix.target }}/release/${{ matrix.artifact_name }}" "${{ matrix.asset_name }}"
 
-      - name: Create Release
+      - name: Upload Release Asset
         uses: softprops/action-gh-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: Release ${{ steps.get_version.outputs.VERSION }}
-          files: code_prompt-${{ steps.get_version.outputs.VERSION }}-${{ matrix.target }}
-          draft: false
-          prerelease: false
+          files: ${{ matrix.asset_name }}
