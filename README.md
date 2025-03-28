@@ -2,25 +2,17 @@
 
 A command-line tool for gathering source code files into a single consolidated file, making it easy to create code prompts for AI tools, documentation, or sharing.
 
-<div style="height: 170px; width: 300px; overflow: hidden;">
+<div style="height: 210px; width: 400px; overflow: hidden;">
   <img src="https://cdn.lpkt.cn/img/capture/code_prompt.png" alt="code_prompt.rs" width="600"/>
 </div>
 
-## Features
-
-- Search for files in specified directories
-- Include or exclude files using regex patterns
-- Respect `.gitignore` rules
-- Add line numbers to output
-- Show matched files before processing
-- Format output with file paths and code fences
-
-
 ## Installation
 
-### Release
+```bash
+curl -fsSL https://github.com/lollipopkit/code_prompt.rs/main/install.sh | bash
+```
 
-Download from the [release page](https://github.com/lollipopkit/code_prompt.rs/releases).
+Or download from the [release page](https://github.com/lollipopkit/code_prompt.rs/releases) manually.
 
 ## Usage
 
