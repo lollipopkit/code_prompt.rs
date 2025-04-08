@@ -17,11 +17,11 @@ Or download from the [release page](https://github.com/lollipopkit/code_prompt.r
 ## Usage
 
 ```bash
-# Basic usage (searches current directory, outputs to code_prompt.txt)
+# Basic usage (searches current directory, outputs to code_prompt.md)
 code_prompt
 
 # Specify a different output file
-code_prompt -o code_prompt.txt
+code_prompt -o output.md
 
 # Search in a specific directory
 code_prompt -d /path/to/project
@@ -39,7 +39,7 @@ More attrs can be found via `code_prompt --help`.
 
 | Option | Long Form | Description | Default |
 |--------|-----------|-------------|---------|
-| `-o` | `--output` | Output file name | `code_prompt.txt` |
+| `-o` | `--output` | Output file name | `code_prompt.md` |
 | `-d` | `--dir` | Directory to search for files | `.` (current directory) |
 | `-e` | `--exclude` | Glob patterns to exclude files (comma separated) | none |
 | `-i` | `--include` | Glob patterns to include files (comma separated) | none |
@@ -48,6 +48,7 @@ More attrs can be found via `code_prompt --help`.
 |  | `--show-matched` | Show matched files | `false` |
 |  | `--ignore-comments` | Ignore comment lines | `false` |
 |  | `--ignore-empty-lines` | Ignore empty lines | `false` |
+|  | `--skip-confirm` | Skip confirmation for overwriting output file | `false` |
 
 ## License
 
