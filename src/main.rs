@@ -4,8 +4,10 @@ use anyhow::{Context, Result};
 use async_std::{fs, path::PathBuf, prelude::*};
 use clap::Parser;
 use colored::Colorize;
-use ignore::WalkBuilder;
-use regex::Regex;
+use ignore::{
+    overrides::{Override, OverrideBuilder},
+    WalkBuilder,
+};
 use std::io::{self, Write};
 
 const DEFAULT_OUTPUT_FILE: &str = "code_prompt.txt";
@@ -21,11 +23,11 @@ struct Args {
     #[arg(short = 'd', long, default_value = ".")]
     dir: PathBuf,
 
-    /// Regex patterns to exclude files (comma separated)
+    /// Glob patterns to exclude files (comma separated)
     #[arg(short = 'e', long)]
     exclude: Option<String>,
 
-    /// Regex patterns to include files (comma separated)
+    /// Glob patterns to include files (comma separated)
     #[arg(short = 'i', long)]
     include: Option<String>,
 
@@ -33,9 +35,9 @@ struct Args {
     #[arg(short = 'l', long, default_value_t = false)]
     line_number: bool,
 
-    /// Respect .gitignore rules
-    #[arg(short = 'g', long, default_value_t = true)]
-    respect_gitignore: bool,
+    /// Respect standard filters like .gitignore
+    #[arg(short = 'f', long, default_value_t = true)]
+    standard_filter: bool,
 
     /// Show matched files
     #[arg(long, default_value_t = false)]
@@ -44,42 +46,24 @@ struct Args {
     /// Relative path prefix to strip (for better Windows compatibility)
     #[arg(skip = std::path::MAIN_SEPARATOR.to_string() + ".")]
     relative_prefix: String,
+}
 
-    /// Cached compiled regex patterns for exclude
-    #[clap(skip)]
-    exclude_regexs: Option<Vec<Regex>>,
-
-    /// Cached compiled regex patterns for include
-    #[clap(skip)]
-    include_regexs: Option<Vec<Regex>>,
+impl Default for Args {
+    fn default() -> Self {
+        Self {
+            output: DEFAULT_OUTPUT_FILE.to_string(),
+            dir: PathBuf::from("."),
+            exclude: None,
+            include: None,
+            line_number: false,
+            standard_filter: true,
+            show_matched: false,
+            relative_prefix: String::new(),
+        }
+    }
 }
 
 impl Args {
-    /// Check if the file should be included or excluded.
-    ///
-    /// - `path` is the file path to check.
-    /// - `default_include` is the default value to return if no patterns match.
-    ///
-    /// Returns `true` if the file should be included, `false` otherwise.
-    fn should_include(&self, path: &str, default_include: Option<bool>) -> bool {
-        let (mut exclude_is_empty, mut include_is_empty) = (true, true);
-        if let Some(exclude_patterns) = &self.exclude_regexs {
-            exclude_is_empty = exclude_patterns.is_empty();
-            if !exclude_is_empty && exclude_patterns.iter().any(|re| re.is_match(path)) {
-                return false;
-            }
-        }
-
-        if let Some(include_patterns) = &self.include_regexs {
-            include_is_empty = include_patterns.is_empty();
-            if !include_is_empty && include_patterns.iter().any(|re| re.is_match(path)) {
-                return true;
-            }
-        }
-
-        default_include.unwrap_or(exclude_is_empty && include_is_empty)
-    }
-
     /// Convert a path to a platform-independent string format for matching
     fn path_to_normalized_string(&self, path: &PathBuf) -> Option<String> {
         path.to_str().map(|p| {
@@ -92,6 +76,63 @@ impl Args {
                 .unwrap_or(&normalized)
                 .to_string()
         })
+    }
+
+    fn build_overrides(&self) -> Result<Option<Override>> {
+        let mut builder = OverrideBuilder::new(&self.dir);
+
+        let mut has_patterns = false;
+
+        if let Some(include) = &self.include {
+            for pattern in include.split(',').filter(|p| !p.is_empty()) {
+                builder.add(pattern)?;
+                has_patterns = true;
+            }
+        }
+
+        if let Some(exclude) = &self.exclude {
+            for pattern in exclude.split(',').filter(|p| !p.is_empty()) {
+                builder.add(&format!("!{}", pattern))?;
+                has_patterns = true;
+            }
+        }
+
+        if has_patterns {
+            Ok(Some(builder.build()?))
+        } else {
+            Ok(None)
+        }
+    }
+
+    async fn find_files(&self) -> Result<Vec<PathBuf>> {
+        let mut files = Vec::new();
+        let overrides = self.build_overrides()?;
+
+        let mut builder = WalkBuilder::new(&self.dir);
+        builder.standard_filters(self.standard_filter);
+
+        if let Some(overrides) = overrides {
+            builder.overrides(overrides);
+        }
+
+        let walked_files = builder.build();
+
+        for result in walked_files {
+            let entry = match result {
+                Ok(entry) => entry,
+                Err(_) => continue,
+            };
+
+            let path = entry.path();
+            if !path.is_file() {
+                continue;
+            }
+
+            let path_buf = PathBuf::from(path);
+            files.push(path_buf);
+        }
+
+        Ok(files)
     }
 }
 
@@ -117,85 +158,12 @@ fn ask_continue(message: &str, default_value: bool) -> Result<bool> {
     Ok(lower_answer == "y" || lower_answer == "yes")
 }
 
-async fn find_files(args: &Args) -> Result<Vec<PathBuf>> {
-    let mut files = Vec::new();
-
-    // If respect_gitignore is true, use the ignore crate which handles .gitignore rules
-    if args.respect_gitignore {
-        // Create a walker that respects .gitignore rules
-        let walker = WalkBuilder::new(&args.dir)
-            .standard_filters(true) // Use standard filters like .gitignore
-            .build();
-
-        for result in walker {
-            let entry = match result {
-                Ok(entry) => entry,
-                Err(_) => continue,
-            };
-
-            let path = entry.path();
-            if !path.is_file() {
-                continue;
-            }
-
-            let path_buf = PathBuf::from(path);
-
-            // Check if we should include this file
-            if let Some(normalized_path) = args.path_to_normalized_string(&path_buf) {
-                if args.should_include(&normalized_path, Some(true)) {
-                    files.push(path_buf);
-                }
-            }
-        }
-    } else {
-        let mut entries = fs::read_dir(&args.dir).await?;
-        while let Some(entry) = entries.next().await {
-            let entry = entry?;
-            let path = entry.path();
-
-            if path.is_dir().await {
-                let mut subdir_files = Box::pin(find_files(args)).await?;
-                files.append(&mut subdir_files);
-            } else if path.is_file().await {
-                // Check if we should include this file
-                if let Some(normalized_path) = args.path_to_normalized_string(&path) {
-                    if args.should_include(&normalized_path, None) {
-                        files.push(path);
-                    }
-                }
-            }
-        }
-    }
-
-    Ok(files)
-}
-
 #[async_std::main]
 async fn main() -> Result<()> {
     let mut args = Args::parse();
 
     // Set the relative prefix based on platform
     args.relative_prefix = format!("{}{}", std::path::MAIN_SEPARATOR, ".");
-
-    // Cached compiled regex patterns
-    if let Some(exclude) = &args.exclude {
-        args.exclude_regexs = Some(
-            exclude
-                .split(',')
-                .filter(|p| !p.is_empty())
-                .filter_map(|p| Regex::new(p).ok())
-                .collect(),
-        );
-    }
-    if let Some(include) = &args.include {
-        args.include_regexs = Some(
-            include
-                .split(',')
-                .filter(|p| !p.is_empty())
-                .filter_map(|p| Regex::new(p).ok())
-                .collect(),
-        );
-    }
 
     // Check if the output file exists and confirm overwrite
     let output_path = PathBuf::from(&args.output);
@@ -217,7 +185,7 @@ async fn main() -> Result<()> {
     }
 
     // Find all files according to criteria
-    let files = find_files(&args).await?;
+    let files = args.find_files().await?;
     if files.is_empty() {
         println!("No files found matching the criteria.");
         return Ok(());
@@ -248,16 +216,18 @@ async fn main() -> Result<()> {
 
         // Use normalized path display for consistency across platforms
         if let Some(normalized_path) = args.path_to_normalized_string(file_path) {
-            output
-                .write_all(format!("{}\n```\n", normalized_path).as_bytes())
-                .await?;
+            // Detect language for syntax highlighting
+            let language = utils::detect_language_from_path(&normalized_path);
+            let code_block_start = format!("{}\n```{}\n", normalized_path, language);
+            output.write_all(code_block_start.as_bytes()).await?;
 
             if args.line_number {
+                // Use a buffer to reduce write operations
+                let mut buffer = String::with_capacity(content.len() + content.lines().count() * 8);
                 for (i, line) in content.lines().enumerate() {
-                    output
-                        .write_all(format!("{}\t{}\n", i + 1, line).as_bytes())
-                        .await?;
+                    buffer.push_str(&format!("{}\t{}\n", i + 1, line));
                 }
+                output.write_all(buffer.as_bytes()).await?;
             } else {
                 output.write_all(content.as_bytes()).await?;
                 if !content.ends_with('\n') {
@@ -269,19 +239,10 @@ async fn main() -> Result<()> {
         }
     }
 
-    // Show summary
-    let output_size = fs::metadata(&output_path).await?.len() as f64 / 1024.0;
-    // Convert to KB/MB and format
-    let output_size = if output_size < 1024.0 {
-        format!("{:.1} KB", output_size)
-    } else {
-        format!("{:.1} MB", output_size / 1024.0)
-    };
-    println!(
-        "==> {} ({})",
-        args.output.underline(),
-        output_size.to_string().cyan(),
-    );
+    // Show summary with improved size formatting
+    let output_size = fs::metadata(&output_path).await?.len() as f64;
+    let output_size = utils::format_file_size(output_size);
+    println!("==> {} ({})", args.output.underline(), output_size.cyan(),);
 
     Ok(())
 }

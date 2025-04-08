@@ -9,6 +9,5 @@ description = "Combine code files into a single file for LLM prompts."
 clap = { version = "4", features = ["derive"] }
 async-std = { version = "1", features = ["attributes"] }
 anyhow = "1"
-regex = "1"
 colored = "3"
 ignore = "0.4"
