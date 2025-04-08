@@ -138,14 +138,25 @@ impl Args {
         Ok(files)
     }
 
-    pub async fn write_buffer(&self, path: &Path, content: &String) -> Result<String> {
+    /// Write the content of a file to a buffer with optional line numbers
+    /// and syntax highlighting
+    /// 
+    /// - `path`: The path of the file
+    /// - `content`: The content of the file
+    /// - `size`: The size of the file in bytes
+    /// 
+    /// Returns the buffer as a String
+    pub async fn write_buffer(&self, path: &Path, content: &String, size: usize) -> Result<String> {
         // Use a buffer to reduce write operations
-        let mut buffer = String::with_capacity(content.len() + content.lines().count() * 8);
+        let mut buffer = String::with_capacity(size);
+        buffer.push_str(&format!("## {}\n\n", path.display()));
 
         // Detect language for syntax highlighting
         let language = utils::detect_language_from_path(&path);
         if let Some(lang) = language {
-            buffer.push_str(&format!("```{}\n", lang));
+            buffer.push_str("```");
+            buffer.push_str(&lang);
+            buffer.push_str("\n");
         } else {
             buffer.push_str("```\n");
         }

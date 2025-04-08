@@ -71,17 +71,21 @@ async fn main() -> Result<()> {
             .await
             .with_context(|| format!("Failed to read file {:?}", file_path))?;
 
-        let buf = args.write_buffer(&file_path, &content).await?;
+        let size = fs::metadata(file_path)
+            .await
+            .map(|e| e.len() as f64)
+            .unwrap_or(0.0);
+        if size == 0.0 {
+            continue;
+        }
+        let buf = args
+            .write_buffer(&file_path, &content, size as usize)
+            .await?;
         output.write_all(buf.as_bytes()).await?;
 
         if args.show_matched {
-            let size = fs::metadata(file_path).await.map(|e| e.len() as f64);
             // Show matched file path
-            println!(
-                "{}: {}",
-                file_path.display(),
-                size.map_or_else(|_| "N/A".to_string(), |s| utils::format_file_size(s))
-            );
+            println!("{}: {}", file_path.display(), utils::format_file_size(size));
         }
     }
 
@@ -93,8 +97,13 @@ async fn main() -> Result<()> {
 
     // Show summary with improved size formatting
     let output_size = fs::metadata(&output_path).await?.len() as f64;
+    if output_size >= PROMPT_FILE_SIZE_THRESHOLD {
+        println!("The generate file is large, maybe consider decrease the size, see {}.", "--help".yellow());
+    }
     let output_size = utils::format_file_size(output_size);
-    println!("==> {} ({})", args.output.underline(), output_size.cyan(),);
+    println!("==> {} ({})", args.output.underline(), output_size.cyan());
 
     Ok(())
 }
+
+const PROMPT_FILE_SIZE_THRESHOLD: f64 = 1024.0 * 1024.0 * 10.0; // 10 MB
