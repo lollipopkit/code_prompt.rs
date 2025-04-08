@@ -1,45 +1,15 @@
 use async_std::path::Path;
+use phf::phf_map;
 
 /// Detects programming language from file extension for syntax highlighting
-pub fn detect_language_from_path(path_str: &str) -> String {
-    let path = Path::new(path_str);
-
-    match path.extension().and_then(|ext| ext.to_str()) {
-        Some(ext) => match ext.to_lowercase().as_str() {
-            "rs" => "rust",
-            "js" => "javascript",
-            "ts" => "typescript",
-            "py" => "python",
-            "java" => "java",
-            "c" | "h" => "c",
-            "cpp" | "hpp" | "cc" | "cxx" => "cpp",
-            "go" => "go",
-            "rb" => "ruby",
-            "php" => "php",
-            "sh" => "bash",
-            "html" | "htm" => "html",
-            "css" => "css",
-            "json" => "json",
-            "md" => "markdown",
-            "sql" => "sql",
-            "yaml" | "yml" => "yaml",
-            "xml" => "xml",
-            "toml" => "toml",
-            "kt" | "kts" => "kotlin",
-            "swift" => "swift",
-            "dart" => "dart",
-            "r" => "r",
-            "ex" | "exs" => "elixir",
-            "hs" => "haskell",
-            "pl" => "perl",
-            "cs" => "csharp",
-            "fs" | "fsx" => "fsharp",
-            "scala" => "scala",
-            _ => "",
-        },
-        None => "",
-    }
-    .to_string()
+pub fn detect_language_from_path(path: &Path) -> Option<&'static str> {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .map(|s| {
+            let ext = s.to_lowercase();
+            LANG_EXT_MD_MAP.get(ext.as_str()).map(|lang| *lang)
+        })
+        .flatten()
 }
 
 /// Formats file size to human-readable format with appropriate units (B, KB, MB, GB)
@@ -99,37 +69,82 @@ pub fn smart_pattern_split(pattern_str: &str) -> Vec<String> {
     patterns
 }
 
-const COMMENT_PREFIXES: &[(&str, &str)] = &[
-    ("rs", "//"),
-    ("js", "//"),
-    ("ts", "//"),
-    ("py", "#"),
-    ("java", "//"),
-    ("c", "//"),
-    ("cpp", "//"),
-    ("go", "//"),
-    ("rb", "#"),
-    ("php", "//"),
-    ("sh", "#"),
-    ("html", "<!--"),
-    ("css", "/*"),
-    ("json", "//"),
-    ("md", "<!--"),
-    ("sql", "--"),
-    ("yaml", "#"),
-    ("xml", "<!--"),
-];
-
-pub fn get_comment_prefix(path: &Path) -> Option<String> {
+pub fn get_comment_prefix(path: &Path) -> Option<&'static str> {
     match path
         .extension()
         .and_then(|ext| ext.to_str())
         .map(|s| s.to_lowercase())
     {
-        Some(ext) => COMMENT_PREFIXES
-            .iter()
-            .find(|(e, _)| e == &ext)
-            .map(|(_, prefix)| prefix.to_string()),
+        Some(ext) => COMMENT_PREFIXES_MAP.get(ext.as_str()).map(|s| *s),
         None => None,
     }
 }
+
+static LANG_EXT_MD_MAP: phf::Map<&'static str, &'static str> = phf_map! {
+    "rs" => "rust",
+    "go" => "go",
+    "swift" => "swift",
+    "dart" => "dart",
+    "js" => "javascript",
+    "ts" => "typescript",
+    "py" => "python",
+    "yaml" => "yaml",
+    "yml" => "yaml",
+    "xml" => "xml",
+    "toml" => "toml",
+    "java" => "java",
+    "sh" => "bash",
+    "html" => "html",
+    "htm" => "html",
+    "css" => "css",
+    "json" => "json",
+    "md" => "markdown",
+    "sql" => "sql",
+    "c" => "c",
+    "h" => "c",
+    "cpp" => "cpp",
+    "hpp" => "cpp",
+    "cc" => "cpp",
+    "cxx" => "cpp",
+    "kt" => "kotlin",
+    "kts" => "kotlin",
+    "r" => "r",
+    "ex" => "elixir",
+    "exs" => "elixir",
+    "hs" => "haskell",
+    "pl" => "perl",
+    "cs" => "csharp",
+    "fs" => "fsharp",
+    "fsx" => "fsharp",
+    "rb" => "ruby",
+    "php" => "php",
+    "csv" => "csv",
+    "bat" => "batch",
+    "ps1" => "powershell",
+    "psm1" => "powershell",
+    "psd1" => "powershell",
+    "ps1xml" => "powershell",
+    "cmd" => "batch",
+    "vbs" => "vbscript",
+};
+
+const COMMENT_PREFIXES_MAP: phf::Map<&'static str, &'static str> = phf_map! {
+    "rs" => "//",
+    "js" => "//",
+    "ts" => "//",
+    "py" => "#",
+    "java" => "//",
+    "c" => "//",
+    "cpp" => "//",
+    "go" => "//",
+    "rb" => "#",
+    "php" => "//",
+    "sh" => "#",
+    "html" => "<!--",
+    "css" => "/*",
+    "json" => "//",
+    "md" => "<!--",
+    "sql" => "--",
+    "yaml" => "#",
+    "xml" => "<!--",
+};
