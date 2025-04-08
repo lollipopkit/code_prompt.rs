@@ -9,7 +9,7 @@ use ignore::{
     WalkBuilder,
 };
 use std::io::{self, Write};
-use utils::get_comment_prefix;
+use utils::{get_comment_prefix, smart_pattern_split};
 
 const DEFAULT_OUTPUT_FILE: &str = "code_prompt.txt";
 
@@ -89,46 +89,6 @@ impl Args {
         })
     }
 
-    /// Split patterns by commas while respecting glob brace expressions
-    ///
-    /// eg:
-    /// code_prompt --show-matched -e '*.png,*.ico,lib/{generated,l10n}*'
-    fn smart_pattern_split(pattern_str: &str) -> Vec<String> {
-        let mut patterns = Vec::new();
-        let mut current_pattern = String::new();
-        let mut brace_depth = 0;
-
-        for ch in pattern_str.chars() {
-            match ch {
-                '{' => {
-                    brace_depth += 1;
-                    current_pattern.push(ch);
-                }
-                '}' => {
-                    if brace_depth > 0 {
-                        brace_depth -= 1;
-                    }
-                    current_pattern.push(ch);
-                }
-                ',' if brace_depth == 0 => {
-                    if !current_pattern.is_empty() {
-                        patterns.push(current_pattern);
-                        current_pattern = String::new();
-                    }
-                }
-                _ => {
-                    current_pattern.push(ch);
-                }
-            }
-        }
-
-        if !current_pattern.is_empty() {
-            patterns.push(current_pattern);
-        }
-
-        patterns
-    }
-
     /// Build overrides based on include and exclude patterns
     fn build_overrides(&self) -> Result<Option<Override>> {
         let mut builder = OverrideBuilder::new(&self.dir);
@@ -136,7 +96,7 @@ impl Args {
         let mut has_patterns = false;
 
         if let Some(include) = &self.include {
-            for pattern in Self::smart_pattern_split(include)
+            for pattern in smart_pattern_split(include)
                 .into_iter()
                 .filter(|p| !p.is_empty())
             {
@@ -146,7 +106,7 @@ impl Args {
         }
 
         if let Some(exclude) = &self.exclude {
-            for pattern in Self::smart_pattern_split(exclude)
+            for pattern in smart_pattern_split(exclude)
                 .into_iter()
                 .filter(|p| !p.is_empty())
             {

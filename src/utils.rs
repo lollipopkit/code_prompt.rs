@@ -59,6 +59,46 @@ pub fn format_file_size(size_in_bytes: f64) -> String {
     }
 }
 
+/// Split patterns by commas while respecting glob brace expressions
+///
+/// eg:
+/// code_prompt --show-matched -e '*.png,*.ico,lib/{generated,l10n}*'
+pub fn smart_pattern_split(pattern_str: &str) -> Vec<String> {
+    let mut patterns = Vec::new();
+    let mut current_pattern = String::new();
+    let mut brace_depth = 0;
+
+    for ch in pattern_str.chars() {
+        match ch {
+            '{' => {
+                brace_depth += 1;
+                current_pattern.push(ch);
+            }
+            '}' => {
+                if brace_depth > 0 {
+                    brace_depth -= 1;
+                }
+                current_pattern.push(ch);
+            }
+            ',' if brace_depth == 0 => {
+                if !current_pattern.is_empty() {
+                    patterns.push(current_pattern);
+                    current_pattern = String::new();
+                }
+            }
+            _ => {
+                current_pattern.push(ch);
+            }
+        }
+    }
+
+    if !current_pattern.is_empty() {
+        patterns.push(current_pattern);
+    }
+
+    patterns
+}
+
 const COMMENT_PREFIXES: &[(&str, &str)] = &[
     ("rs", "//"),
     ("js", "//"),
@@ -81,7 +121,11 @@ const COMMENT_PREFIXES: &[(&str, &str)] = &[
 ];
 
 pub fn get_comment_prefix(path: &Path) -> Option<String> {
-    match path.extension().and_then(|ext| ext.to_str()).map(|s| s.to_lowercase()) {
+    match path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map(|s| s.to_lowercase())
+    {
         Some(ext) => COMMENT_PREFIXES
             .iter()
             .find(|(e, _)| e == &ext)
