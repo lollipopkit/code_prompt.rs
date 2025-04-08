@@ -260,7 +260,8 @@ async fn main() -> Result<()> {
                 }
             }
 
-            output.write_all(b"```\n\n").await?;
+            buffer.push_str("```\n\n");
+            output.write_all(buffer.as_bytes()).await?;
 
             if args.show_matched {
                 let size = fs::metadata(file_path).await.map(|e| e.len() as f64);
