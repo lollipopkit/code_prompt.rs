@@ -1,6 +1,6 @@
 [package]
 name = "code_prompt"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["lollipopkit <a@lpkt.cn>"]
 description = "Combine code files into a single file for LLM prompts."

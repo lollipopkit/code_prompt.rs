@@ -1,4 +1,4 @@
-use std::path::Path;
+use async_std::path::Path;
 
 /// Detects programming language from file extension for syntax highlighting
 pub fn detect_language_from_path(path_str: &str) -> String {
@@ -56,5 +56,36 @@ pub fn format_file_size(size_in_bytes: f64) -> String {
         format!("{:.1} MB", size_in_bytes / MB)
     } else {
         format!("{:.2} GB", size_in_bytes / GB)
+    }
+}
+
+const COMMENT_PREFIXES: &[(&str, &str)] = &[
+    ("rs", "//"),
+    ("js", "//"),
+    ("ts", "//"),
+    ("py", "#"),
+    ("java", "//"),
+    ("c", "//"),
+    ("cpp", "//"),
+    ("go", "//"),
+    ("rb", "#"),
+    ("php", "//"),
+    ("sh", "#"),
+    ("html", "<!--"),
+    ("css", "/*"),
+    ("json", "//"),
+    ("md", "<!--"),
+    ("sql", "--"),
+    ("yaml", "#"),
+    ("xml", "<!--"),
+];
+
+pub fn get_comment_prefix(path: &Path) -> Option<String> {
+    match path.extension().and_then(|ext| ext.to_str()).map(|s| s.to_lowercase()) {
+        Some(ext) => COMMENT_PREFIXES
+            .iter()
+            .find(|(e, _)| e == &ext)
+            .map(|(_, prefix)| prefix.to_string()),
+        None => None,
     }
 }

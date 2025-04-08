@@ -9,6 +9,7 @@ use ignore::{
     WalkBuilder,
 };
 use std::io::{self, Write};
+use utils::get_comment_prefix;
 
 const DEFAULT_OUTPUT_FILE: &str = "code_prompt.txt";
 
@@ -46,6 +47,14 @@ struct Args {
     /// Relative path prefix to strip (for better Windows compatibility)
     #[arg(skip = std::path::MAIN_SEPARATOR.to_string() + ".")]
     relative_prefix: String,
+
+    /// Ignore comments lines
+    #[arg(long, default_value_t = false)]
+    ignore_comments: bool,
+
+    /// Ignore empty lines
+    #[arg(long, default_value_t = false)]
+    ignore_empty_lines: bool,
 }
 
 impl Default for Args {
@@ -59,6 +68,8 @@ impl Default for Args {
             standard_filter: true,
             show_matched: false,
             relative_prefix: String::new(),
+            ignore_comments: false,
+            ignore_empty_lines: false,
         }
     }
 }
@@ -78,20 +89,67 @@ impl Args {
         })
     }
 
+    /// Split patterns by commas while respecting glob brace expressions
+    ///
+    /// eg:
+    /// code_prompt --show-matched -e '*.png,*.ico,lib/{generated,l10n}*'
+    fn smart_pattern_split(pattern_str: &str) -> Vec<String> {
+        let mut patterns = Vec::new();
+        let mut current_pattern = String::new();
+        let mut brace_depth = 0;
+
+        for ch in pattern_str.chars() {
+            match ch {
+                '{' => {
+                    brace_depth += 1;
+                    current_pattern.push(ch);
+                }
+                '}' => {
+                    if brace_depth > 0 {
+                        brace_depth -= 1;
+                    }
+                    current_pattern.push(ch);
+                }
+                ',' if brace_depth == 0 => {
+                    if !current_pattern.is_empty() {
+                        patterns.push(current_pattern);
+                        current_pattern = String::new();
+                    }
+                }
+                _ => {
+                    current_pattern.push(ch);
+                }
+            }
+        }
+
+        if !current_pattern.is_empty() {
+            patterns.push(current_pattern);
+        }
+
+        patterns
+    }
+
+    /// Build overrides based on include and exclude patterns
     fn build_overrides(&self) -> Result<Option<Override>> {
         let mut builder = OverrideBuilder::new(&self.dir);
 
         let mut has_patterns = false;
 
         if let Some(include) = &self.include {
-            for pattern in include.split(',').filter(|p| !p.is_empty()) {
-                builder.add(pattern)?;
+            for pattern in Self::smart_pattern_split(include)
+                .into_iter()
+                .filter(|p| !p.is_empty())
+            {
+                builder.add(&pattern)?;
                 has_patterns = true;
             }
         }
 
         if let Some(exclude) = &self.exclude {
-            for pattern in exclude.split(',').filter(|p| !p.is_empty()) {
+            for pattern in Self::smart_pattern_split(exclude)
+                .into_iter()
+                .filter(|p| !p.is_empty())
+            {
                 builder.add(&format!("!{}", pattern))?;
                 has_patterns = true;
             }
@@ -104,6 +162,8 @@ impl Args {
         }
     }
 
+    /// Find files in the specified directory based on include/exclude patterns
+    /// and standard filters
     async fn find_files(&self) -> Result<Vec<PathBuf>> {
         let mut files = Vec::new();
         let overrides = self.build_overrides()?;
@@ -136,6 +196,7 @@ impl Args {
     }
 }
 
+/// Ask the user for confirmation to continue
 fn ask_continue(message: &str, default_value: bool) -> Result<bool> {
     let prompt = if default_value {
         format!("{} [Y/n]: ", message)
@@ -189,21 +250,8 @@ async fn main() -> Result<()> {
     if files.is_empty() {
         println!("No files found matching the criteria.");
         return Ok(());
-    } else {
-        if args.show_matched {
-            println!("\nMatched files:");
-            for file in &files {
-                if let Some(path_str) = file.to_str() {
-                    println!("{}", path_str.green());
-                }
-            }
-        }
-
-        // Show the number of files found
-        println!(
-            "\nFound {} files matching the criteria.",
-            files.len().to_string().green()
-        );
+    } else if args.show_matched {
+        println!("\nMatched files:");
     }
 
     // Process and write files
@@ -221,23 +269,56 @@ async fn main() -> Result<()> {
             let code_block_start = format!("{}\n```{}\n", normalized_path, language);
             output.write_all(code_block_start.as_bytes()).await?;
 
-            if args.line_number {
-                // Use a buffer to reduce write operations
-                let mut buffer = String::with_capacity(content.len() + content.lines().count() * 8);
-                for (i, line) in content.lines().enumerate() {
-                    buffer.push_str(&format!("{}\t{}\n", i + 1, line));
+            let comment_prefix = get_comment_prefix(&file_path);
+
+            // Use a buffer to reduce write operations
+            let mut buffer = String::with_capacity(content.len() + content.lines().count() * 8);
+            let lines = content.lines().enumerate();
+
+            for (i, line) in lines {
+                // Skip lines by rules
+                if line.is_empty() && args.ignore_empty_lines {
+                    continue;
                 }
-                output.write_all(buffer.as_bytes()).await?;
-            } else {
-                output.write_all(content.as_bytes()).await?;
-                if !content.ends_with('\n') {
-                    output.write_all(b"\n").await?;
+                if args.ignore_comments {
+                    if let Some(prefix) = &comment_prefix {
+                        if line.trim_start().starts_with(prefix) {
+                            continue;
+                        }
+                    }
+                }
+
+                // Write line to buffer
+                if args.line_number {
+                    // DO NOT trim_end(), keep the original line endings
+                    buffer.push_str(&format!("{}\t{}\n", i + 1, line));
+                } else {
+                    buffer.push_str(line);
+                    if !line.ends_with('\n') {
+                        buffer.push('\n');
+                    }
                 }
             }
 
             output.write_all(b"```\n\n").await?;
+
+            if args.show_matched {
+                let size = fs::metadata(file_path).await.map(|e| e.len() as f64);
+                // Show matched file path
+                println!(
+                    "{}: {}",
+                    normalized_path.underline(),
+                    size.map_or_else(|_| "N/A".to_string(), |s| utils::format_file_size(s))
+                );
+            }
         }
     }
+
+    // Show the number of files found
+    println!(
+        "\nFound {} files matching the criteria.",
+        files.len().to_string().green()
+    );
 
     // Show summary with improved size formatting
     let output_size = fs::metadata(&output_path).await?.len() as f64;
