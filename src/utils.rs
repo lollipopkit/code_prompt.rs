@@ -69,17 +69,7 @@ pub fn smart_pattern_split(pattern_str: &str) -> Vec<String> {
     patterns
 }
 
-pub fn get_comment_prefix(path: &Path) -> Option<&'static str> {
-    match path
-        .extension()
-        .and_then(|ext| ext.to_str())
-        .map(|s| s.to_lowercase())
-    {
-        Some(ext) => COMMENT_PREFIXES_MAP.get(ext.as_str()).map(|s| *s),
-        None => None,
-    }
-}
-
+/// {ext: lang}
 static LANG_EXT_MD_MAP: phf::Map<&'static str, &'static str> = phf_map! {
     "rs" => "rust",
     "go" => "go",
@@ -126,25 +116,4 @@ static LANG_EXT_MD_MAP: phf::Map<&'static str, &'static str> = phf_map! {
     "ps1xml" => "powershell",
     "cmd" => "batch",
     "vbs" => "vbscript",
-};
-
-const COMMENT_PREFIXES_MAP: phf::Map<&'static str, &'static str> = phf_map! {
-    "rs" => "//",
-    "js" => "//",
-    "ts" => "//",
-    "py" => "#",
-    "java" => "//",
-    "c" => "//",
-    "cpp" => "//",
-    "go" => "//",
-    "rb" => "#",
-    "php" => "//",
-    "sh" => "#",
-    "html" => "<!--",
-    "css" => "/*",
-    "json" => "//",
-    "md" => "<!--",
-    "sql" => "--",
-    "yaml" => "#",
-    "xml" => "<!--",
 };

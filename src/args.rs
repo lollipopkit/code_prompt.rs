@@ -41,10 +41,6 @@ pub struct Args {
     #[arg(long, default_value_t = false)]
     pub show_matched: bool,
 
-    /// Ignore comments lines
-    #[arg(long, default_value_t = false)]
-    pub ignore_comments: bool,
-
     /// Ignore empty lines
     #[arg(long, default_value_t = false)]
     pub ignore_empty_lines: bool,
@@ -64,7 +60,6 @@ impl Default for Args {
             line_number: false,
             standard_filter: true,
             show_matched: false,
-            ignore_comments: false,
             ignore_empty_lines: false,
             skip_confirm: false,
         }
@@ -161,20 +156,11 @@ impl Args {
             buffer.push_str("```\n");
         }
 
-        let comment_prefix = utils::get_comment_prefix(&path);
-
         let lines = content.lines().enumerate();
         for (i, line) in lines {
             // Skip lines by rules
             if line.is_empty() && self.ignore_empty_lines {
                 continue;
-            }
-            if self.ignore_comments {
-                if let Some(prefix) = &comment_prefix {
-                    if line.trim_start().starts_with(prefix) {
-                        continue;
-                    }
-                }
             }
 
             // Write line to buffer

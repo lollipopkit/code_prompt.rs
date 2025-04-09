@@ -46,7 +46,6 @@ More attrs can be found via `code_prompt --help`.
 | `-l` | `--line-number` | Enable line numbers in output | `false` |
 | `-f` | `--standard-filter` | Respect standard filters like .gitignore | `true` |
 |  | `--show-matched` | Show matched files | `false` |
-|  | `--ignore-comments` | Ignore comment lines | `false` |
 |  | `--ignore-empty-lines` | Ignore empty lines | `false` |
 |  | `--skip-confirm` | Skip confirmation for overwriting output file | `false` |
 
